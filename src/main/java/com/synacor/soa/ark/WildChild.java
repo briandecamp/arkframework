@@ -77,7 +77,7 @@ public class WildChild {
 		}
 		
 		public void process(WatchedEvent event) throws Exception {
-			if(!path.equals(path)) throw new RuntimeException("incorrect path");
+			if(!path.equals(event.getPath())) throw new RuntimeException("incorrect path");
 			
 			boolean childIsLeaf = wildPath.split("/").length == path.split("/").length+1;
 
