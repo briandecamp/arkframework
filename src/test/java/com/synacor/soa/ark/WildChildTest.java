@@ -48,8 +48,8 @@ public class WildChildTest {
 	@Test
 	public void testServer() throws Exception {
         final CountCuratorWatcher watcher = new CountCuratorWatcher();
-        Set<String> currentNodes = new WildChild(newClient(), "/services/.*/deployments/.*/instances/.*/lifecycleState", watcher).getMatchingLeaves();
-		log.info("Initial node count: " + currentNodes.size());
+        new WildChild(newClient(), "/services/.*/deployments/.*/instances/.*/lifecycleState", watcher);
+		log.info("Initial node count: " + watcher.created.size());
 
 		CuratorFramework client = newClient();
 		deleteRecursive(client, "/services");

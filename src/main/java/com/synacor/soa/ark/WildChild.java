@@ -1,10 +1,8 @@
 package com.synacor.soa.ark;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.apache.zookeeper.KeeperException;
@@ -15,6 +13,18 @@ import org.apache.zookeeper.Watcher.Event.KeeperState;
 import com.netflix.curator.framework.CuratorFramework;
 import com.netflix.curator.framework.api.CuratorWatcher;
 
+/**
+ * Sets and re-creates watches as necessary to notify a client of create/delete events for a path that may include wildcards.
+ * The path format is (/name)+ where name may be a regular expression which must not include the '/' character.
+ * examples:
+ *  /services/a*b/deployments/1\.*.0/instances/.*-test/lifecycleState
+ *  /services/a*b/deployments/1\.*.0/instances/.*-test/autoScaling
+ *  /services/a*b/deployments/[1-4]*\.0\.0/instances/.*
+ * usage:
+ *  List<String> initialLeaves = new WildChild(client, "/services/*", watcher).getMatchingLeaves();
+ *  
+ *  The CuratorWatcher will be called initially for all pre-existing matching leaves, and can be used to build the initial list of matches.
+ */
 public class WildChild {
 	CuratorFramework client;
 	private String path;
@@ -22,7 +32,7 @@ public class WildChild {
 	private String matchCriteria; // the next part of the fullPath
 
 	private CuratorWatcher leafWatcher;
-	private Map<String, WildChild> trackedChildren = new HashMap<String, WildChild>();
+	private Set<String> trackedChildren = new HashSet<String>();
 
 	public WildChild(CuratorFramework client, String wildPath, CuratorWatcher leafWatcher) throws Exception {
 		this(client, "", wildPath, leafWatcher);
@@ -41,25 +51,14 @@ public class WildChild {
 		for(String child : children) {
 			String childPath = path + "/" + child;
 			boolean childIsLeaf = childPath.split("/").length == wildPath.split("/").length;
-			trackedChildren.put(child, childIsLeaf ? null : new WildChild(client, childPath, wildPath, leafWatcher));
+			trackedChildren.add(child);
 			if(childIsLeaf) {
 				WatchedEvent createdEvent = new WatchedEvent(EventType.NodeCreated, KeeperState.SyncConnected, childPath);
 				leafWatcher.process(createdEvent);
-			}
-		}
-	}
-
-	public Set<String> getMatchingLeaves() {
-		boolean isChildLeaf = path.split("/").length+1 == wildPath.split("/").length;
-		Set<String> collect = new HashSet<String>();
-		for(String child : trackedChildren.keySet()) {
-			if(isChildLeaf) {
-				collect.add(path + "/" + child);
 			} else {
-				collect.addAll(trackedChildren.get(child).getMatchingLeaves());
+				new WildChild(client, childPath, wildPath, leafWatcher);
 			}
 		}
-		return collect;
 	}
 
 	/**
@@ -86,8 +85,8 @@ public class WildChild {
 				List<String> children = getChildrenSafe();
 				
 				// Remove missing children from tracking list
-				Map<String, WildChild> trackedCopy = new HashMap<String, WildChild>(trackedChildren);
-				for(String trackedChild : trackedCopy.keySet()) {
+				Set<String> trackedCopy = new HashSet<String>(trackedChildren);
+				for(String trackedChild : trackedCopy) {
 					if(!children.contains(trackedChild)) {
 						trackedChildren.remove(trackedChild);
 						if(childIsLeaf) {
@@ -99,16 +98,15 @@ public class WildChild {
 
 				// Add new children to tracking list
 				for(String child : children) {
-					if(child.matches(matchCriteria) && !trackedChildren.containsKey(child)) {
-						WildChild rcw = null;
+					if(child.matches(matchCriteria) && !trackedChildren.contains(child)) {
 						String childPath = path + "/" + child;
 						if(childIsLeaf) {
 							WatchedEvent createdEvent = new WatchedEvent(EventType.NodeCreated, KeeperState.SyncConnected, childPath);
 							leafWatcher.process(createdEvent);
 						} else {
-							rcw = new WildChild(client, childPath, wildPath, leafWatcher);
+							new WildChild(client, childPath, wildPath, leafWatcher);
 						}
-						trackedChildren.put(child, rcw);
+						trackedChildren.add(child);
 					}
 				}
 			}
