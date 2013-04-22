@@ -1,11 +1,13 @@
 package com.synacor.soa.ark;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher.Event.EventType;
 import org.apache.zookeeper.Watcher.Event.KeeperState;
@@ -65,49 +67,48 @@ public class WildChild {
 	 * and manages setting watchers on child nodes or notifying the primary watcher.
 	 */
 	private class WildChildWatcher implements CuratorWatcher {
+		private List<String> getChildrenSafe() {
+			try {
+				return client.getChildren().usingWatcher(this).forPath(path);
+			} catch (KeeperException.NoNodeException exc) {
+				return new ArrayList<String>();
+			} catch (Exception exc) {
+				throw new RuntimeException(exc);
+			}
+		}
+		
 		public void process(WatchedEvent event) throws Exception {
+			if(!path.equals(path)) throw new RuntimeException("incorrect path");
+			
 			boolean childIsLeaf = wildPath.split("/").length == path.split("/").length+1;
 
-			System.out.println(event.getPath() + " " + event.getType().name());
 			if(event.getType() == EventType.NodeChildrenChanged) {
-				if(client.checkExists().forPath(path) != null) {
-					System.out.println(event.getPath() + " exists childIsLeaf: " + childIsLeaf);
-					List<String> children = client.getChildren().usingWatcher(this).forPath(path);
-
-					// Remove missing children from tracking list
-					Map<String, WildChild> trackedCopy = new HashMap<String, WildChild>(trackedChildren);
-					for(String trackedChild : trackedCopy.keySet()) {
-						if(!children.contains(trackedChild)) {
-							trackedChildren.remove(trackedChild);
-							System.out.println(event.getPath() + " removing " + trackedChild);
-							if(childIsLeaf) {
-								WatchedEvent deletedEvent = new WatchedEvent(EventType.NodeDeleted, KeeperState.SyncConnected, path + "/" + trackedChild);
-								leafWatcher.process(deletedEvent);
-							}
-						}
-					}
-
-					// Add new children to tracking list
-					for(String child : children) {
-						if(child.matches(matchCriteria) && !trackedChildren.containsKey(child)) {
-							WildChild rcw = null;
-							String childPath = path + "/" + child;
-							if(childIsLeaf) {
-								WatchedEvent createdEvent = new WatchedEvent(EventType.NodeCreated, KeeperState.SyncConnected, childPath);
-								leafWatcher.process(createdEvent);
-							} else {
-								rcw = new WildChild(client, childPath, wildPath, leafWatcher);
-							}
-							trackedChildren.put(child, rcw);
-						}
-					}
-				} else {
-					System.out.println(event.getPath() + " does not exist. childIsLeaf: " + childIsLeaf);
-					for(String trackedChild : trackedChildren.keySet()) {
+				List<String> children = getChildrenSafe();
+				
+				// Remove missing children from tracking list
+				Map<String, WildChild> trackedCopy = new HashMap<String, WildChild>(trackedChildren);
+				for(String trackedChild : trackedCopy.keySet()) {
+					if(!children.contains(trackedChild)) {
+						trackedChildren.remove(trackedChild);
 						if(childIsLeaf) {
 							WatchedEvent deletedEvent = new WatchedEvent(EventType.NodeDeleted, KeeperState.SyncConnected, path + "/" + trackedChild);
 							leafWatcher.process(deletedEvent);
 						}
+					}
+				}
+
+				// Add new children to tracking list
+				for(String child : children) {
+					if(child.matches(matchCriteria) && !trackedChildren.containsKey(child)) {
+						WildChild rcw = null;
+						String childPath = path + "/" + child;
+						if(childIsLeaf) {
+							WatchedEvent createdEvent = new WatchedEvent(EventType.NodeCreated, KeeperState.SyncConnected, childPath);
+							leafWatcher.process(createdEvent);
+						} else {
+							rcw = new WildChild(client, childPath, wildPath, leafWatcher);
+						}
+						trackedChildren.put(child, rcw);
 					}
 				}
 			}
