@@ -7,19 +7,23 @@ import java.util.Set;
 import org.apache.log4j.Logger;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher.Event.EventType;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import com.netflix.curator.framework.CuratorFramework;
 import com.netflix.curator.framework.CuratorFrameworkFactory;
 import com.netflix.curator.framework.api.CuratorWatcher;
 import com.netflix.curator.retry.ExponentialBackoffRetry;
+import com.netflix.curator.test.TestingServer;
 import com.netflix.curator.test.Timing;
 
 public class WildChildServerTest {
 	private String connectString = "localhost:2181";
 	private Timing timing = new Timing();
 	private Logger log = Logger.getLogger(WildChildServerTest.class);
+	private TestingServer testingServer;
 	
 	public static void main(String[] argv) throws Exception {
 		new WildChildServerTest().testServer();
@@ -51,10 +55,9 @@ public class WildChildServerTest {
         Set<String> currentNodes = new WildChild(newClient(), "/services/.*/deployments/.*/instances/.*/lifecycleState", watcher).getMatchingLeaves();
 		log.info("Initial node count: " + currentNodes.size());
 
-		
 		CuratorFramework client = newClient();
 		deleteRecursive(client, "/services");
-		timing.sleepABit();
+//		timing.sleepABit();
 		log.info("Deleted: " + watcher.deleted.size());
 
 		client.create().creatingParentsIfNeeded().forPath("/services/a/deployments/1.0.0/instances/1/lifecycleState");
@@ -64,11 +67,22 @@ public class WildChildServerTest {
 		client.create().creatingParentsIfNeeded().forPath("/services/b/deployments/1.0.0/instances/1/lifecycleState");
 		client.create().creatingParentsIfNeeded().forPath("/services/b/deployments/1.0.0/instances/2/lifecycleState");
 
-        timing.sleepABit();
+//        timing.sleepABit();
 		log.info(watcher.created.size() == 6);
 		Assert.assertTrue(watcher.changed.size() == 0);
 	}
 
+	@Before
+	public void init() throws Exception {
+		testingServer = new TestingServer();
+		connectString = testingServer.getConnectString();
+	}
+	
+	@After
+	public void teardown() throws Exception {
+		testingServer.close();
+	}
+	
     private void deleteRecursive(CuratorFramework client, String path) throws Exception {
     	if(client.checkExists().forPath(path) == null) return;
     	List<String> children = client.getChildren().forPath(path);
