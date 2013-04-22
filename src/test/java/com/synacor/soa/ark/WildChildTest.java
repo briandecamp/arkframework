@@ -19,15 +19,11 @@ import com.netflix.curator.retry.ExponentialBackoffRetry;
 import com.netflix.curator.test.TestingServer;
 import com.netflix.curator.test.Timing;
 
-public class WildChildServerTest {
+public class WildChildTest {
 	private String connectString = "localhost:2181";
 	private Timing timing = new Timing();
-	private Logger log = Logger.getLogger(WildChildServerTest.class);
+	private Logger log = Logger.getLogger(WildChildTest.class);
 	private TestingServer testingServer;
-	
-	public static void main(String[] argv) throws Exception {
-		new WildChildServerTest().testServer();
-	}
 	
     private static class CountCuratorWatcher implements CuratorWatcher
     {
