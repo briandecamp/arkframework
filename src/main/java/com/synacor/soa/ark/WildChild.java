@@ -21,7 +21,7 @@ import com.netflix.curator.framework.api.CuratorWatcher;
  *  /services/a*b/deployments/1\.*.0/instances/.*-test/autoScaling
  *  /services/a*b/deployments/[1-4]*\.0\.0/instances/.*
  * usage:
- *  List<String> initialLeaves = new WildChild(client, "/services/*", watcher).getMatchingLeaves();
+ *  new WildChild(client, "/services/*", watcher);
  *  
  *  The CuratorWatcher will be called initially for all pre-existing matching leaves, and can be used to build the initial list of matches.
  */
