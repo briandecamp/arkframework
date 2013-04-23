@@ -23,7 +23,7 @@ public class WildChildTest {
 	private String connectString = "localhost:2181";
 	private Timing timing = new Timing();
 	private Logger log = Logger.getLogger(WildChildTest.class);
-	private TestingServer testingServer;
+//	private TestingServer testingServer;
 	
     private static class CountCuratorWatcher implements CuratorWatcher
     {
@@ -48,12 +48,12 @@ public class WildChildTest {
 	@Test
 	public void testServer() throws Exception {
         final CountCuratorWatcher watcher = new CountCuratorWatcher();
-        new WildChild(newClient(), "/services/.*/deployments/.*/instances/.*/lifecycleState", watcher);
+        CuratorFramework serverFramework = newClient();
+        new WildChild(serverFramework, "/services/.*/deployments/.*/instances/.*/lifecycleState", watcher);
 		log.info("Initial node count: " + watcher.created.size());
 
 		CuratorFramework client = newClient();
 		deleteRecursive(client, "/services");
-//		timing.sleepABit();
 		log.info("Deleted: " + watcher.deleted.size());
 
 		client.create().creatingParentsIfNeeded().forPath("/services/a/deployments/1.0.0/instances/1/lifecycleState");
@@ -63,20 +63,23 @@ public class WildChildTest {
 		client.create().creatingParentsIfNeeded().forPath("/services/b/deployments/1.0.0/instances/1/lifecycleState");
 		client.create().creatingParentsIfNeeded().forPath("/services/b/deployments/1.0.0/instances/2/lifecycleState");
 
-//        timing.sleepABit();
-		log.info(watcher.created.size() == 6);
+		client.create().creatingParentsIfNeeded().forPath("/services/b/deployments/1.0.0/instances/2/DOES_NOT_MATCH");
+		client.create().creatingParentsIfNeeded().forPath("/services/b/deployments/1.0.0/DOES_NOT_MATCH/2/lifecycleState");
+
+		Assert.assertTrue(watcher.created.size() == 6);
+		Assert.assertTrue(watcher.deleted.size() == 6);
 		Assert.assertTrue(watcher.changed.size() == 0);
 	}
 
 	@Before
 	public void init() throws Exception {
-		testingServer = new TestingServer();
-		connectString = testingServer.getConnectString();
+//		testingServer = new TestingServer();
+//		connectString = testingServer.getConnectString();
 	}
 	
 	@After
 	public void teardown() throws Exception {
-		testingServer.close();
+//		testingServer.close();
 	}
 	
     private void deleteRecursive(CuratorFramework client, String path) throws Exception {

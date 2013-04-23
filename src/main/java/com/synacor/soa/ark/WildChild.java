@@ -48,19 +48,28 @@ public class WildChild {
 		this.matchCriteria = wildPath.split("/")[index];
 
 		List<String> children = client.getChildren().usingWatcher(new WildChildWatcher()).forPath(path);
+		addChildren(children);
+	}
+
+	private boolean childIsLeaf() {
+		return wildPath.split("/").length == path.split("/").length+1;
+	}
+	
+	private void addChildren(List<String> children) throws Exception {
 		for(String child : children) {
-			String childPath = path + "/" + child;
-			boolean childIsLeaf = childPath.split("/").length == wildPath.split("/").length;
-			trackedChildren.add(child);
-			if(childIsLeaf) {
-				WatchedEvent createdEvent = new WatchedEvent(EventType.NodeCreated, KeeperState.SyncConnected, childPath);
-				leafWatcher.process(createdEvent);
-			} else {
-				new WildChild(client, childPath, wildPath, leafWatcher);
+			if(child.matches(matchCriteria) && !trackedChildren.contains(child)) {
+				String childPath = path + "/" + child;
+				if(childIsLeaf()) {
+					WatchedEvent createdEvent = new WatchedEvent(EventType.NodeCreated, KeeperState.SyncConnected, childPath);
+					leafWatcher.process(createdEvent);
+				} else {
+					new WildChild(client, childPath, wildPath, leafWatcher);
+				}
+				trackedChildren.add(child);
 			}
 		}
 	}
-
+	
 	/**
 	 * Watcher class that monitors a node for child changes,
 	 * and manages setting watchers on child nodes or notifying the primary watcher.
@@ -77,9 +86,8 @@ public class WildChild {
 		}
 		
 		public void process(WatchedEvent event) throws Exception {
-			if(!path.equals(event.getPath())) throw new RuntimeException("incorrect path");
+			if(path.length() > 0 && !path.equals(event.getPath())) throw new RuntimeException("incorrect path");
 			
-			boolean childIsLeaf = wildPath.split("/").length == path.split("/").length+1;
 
 			if(event.getType() == EventType.NodeChildrenChanged) {
 				List<String> children = getChildrenSafe();
@@ -89,7 +97,7 @@ public class WildChild {
 				for(String trackedChild : trackedCopy) {
 					if(!children.contains(trackedChild)) {
 						trackedChildren.remove(trackedChild);
-						if(childIsLeaf) {
+						if(childIsLeaf()) {
 							WatchedEvent deletedEvent = new WatchedEvent(EventType.NodeDeleted, KeeperState.SyncConnected, path + "/" + trackedChild);
 							leafWatcher.process(deletedEvent);
 						}
@@ -97,18 +105,7 @@ public class WildChild {
 				}
 
 				// Add new children to tracking list
-				for(String child : children) {
-					if(child.matches(matchCriteria) && !trackedChildren.contains(child)) {
-						String childPath = path + "/" + child;
-						if(childIsLeaf) {
-							WatchedEvent createdEvent = new WatchedEvent(EventType.NodeCreated, KeeperState.SyncConnected, childPath);
-							leafWatcher.process(createdEvent);
-						} else {
-							new WildChild(client, childPath, wildPath, leafWatcher);
-						}
-						trackedChildren.add(child);
-					}
-				}
+				addChildren(children);
 			}
 		}
 	}
